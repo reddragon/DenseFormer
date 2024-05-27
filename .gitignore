@@ -1,5 +1,6 @@
 # Dataset folder
 experiments/data/datasets/
+experiments/data/pg19
 experiments/wandb/
 experiments/exps/
 experiments/scripts/
