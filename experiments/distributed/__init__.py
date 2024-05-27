@@ -22,8 +22,12 @@ BACKEND_TYPE_TO_MODULE_MAP = {
 }
 
 
+def get_backend_class_from_args(args):
+    return BACKEND_TYPE_TO_MODULE_MAP[args.distributed_backend]
+
+
 def make_backend_from_args(args):
-    return BACKEND_TYPE_TO_MODULE_MAP[args.distributed_backend](args)
+    return get_backend_class_from_args(args)(args)
 
 
 def registered_backends():

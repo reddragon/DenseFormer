@@ -28,6 +28,8 @@ import models
 from data.utils import get_dataset, prepare_dataset
 from optim.base import train_base
 import distributed
+import torch.multiprocessing as mp
+from torch.distributed import init_process_group, destroy_process_group
 
 
 def get_args():
@@ -39,14 +41,26 @@ def get_args():
     return config.parse_args_with_format(format=args.config_format, base_parser=parser, args=rem_args, namespace=args)
 
 
-def main(args): 
-
+def main(rank, args): 
+    print(f'Hello, my rank is: {rank}.')
 
     torch.backends.cuda.matmul.allow_tf32 = True # allows us to make sure we're able to use tensorfloat32 during training
     torch.backends.cudnn.allow_tf32 = True
+        
+    distributed_backend_cls = distributed.get_backend_class_from_args(args)
+    if distributed_backend_cls:
+        world_size = torch.cuda.device_count()
 
-    distributed_backend = distributed.make_backend_from_args(args)
-    args = distributed_backend.get_adjusted_args_for_process(args)
+        print(f'Seems like I am running in a distributed mode. world_size: {world_size}.')
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12355"
+        torch.cuda.set_device(rank)
+        os.environ["WORLD_SIZE"] = f"{world_size}"
+        os.environ["RANK"] = f"{rank}"
+        os.environ["LOCAL_RANK"] = f"{rank}"
+
+        distributed_backend = distributed.make_backend_from_args(args)
+        args = distributed_backend.get_adjusted_args_for_process(args=args)
 
     args.device = torch.device(args.device)
     torch.cuda.set_device(args.device)
@@ -142,4 +156,11 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
-    main(args)
+    distributed_backend = distributed.get_backend_class_from_args(args)
+    if distributed_backend:
+        print(f'In a valid distributed mode via {distributed_backend}.')
+        world_size = torch.cuda.device_count()
+        print(f'Number of GPUs available: {world_size}.')
+        mp.spawn(main, args=(args,), nprocs=world_size)
+    else:
+        main(0, (args,))
